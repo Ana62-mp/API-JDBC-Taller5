@@ -10,203 +10,224 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.krakedev.apijdbc.entidades.Videojuego;
+import com.krakedev.apijdbc.excepciones.VideojuegoDuplicadoException;
+import com.krakedev.apijdbc.excepciones.VideojuegoNoEncontradoException;
 
 public class VideojuegoJdbc {
 
-    private static final Logger log = LoggerFactory.getLogger(VideojuegoJdbc.class);
+	private static final Logger log = LoggerFactory.getLogger(VideojuegoJdbc.class);
 
-    public void insertar(Videojuego videojuego) {
-        Connection con = null;
-        PreparedStatement ps = null;
+	private static final String SQL_BUSCAR_POR_CODIGO = "SELECT codigo, nombre, plataforma, precio, disponible, genero "
+			+ "FROM videojuegos WHERE codigo = ?";
 
-        try {
-            con = Conexion.obtenerConexion();
+	private static final String SQL_INSERTAR = "INSERT INTO videojuegos "
+			+ "(codigo, nombre, plataforma, precio, disponible, genero) " + "VALUES (?, ?, ?, ?, ?, ?)";
 
-            String sql = "INSERT INTO videojuegos "
-                    + "(codigo, nombre, plataforma, precio, disponible, genero) "
-                    + "VALUES (?, ?, ?, ?, ?, ?)";
+	private static final String SQL_LISTAR = "SELECT codigo, nombre, plataforma, precio, disponible, genero "
+			+ "FROM videojuegos";
 
-            ps = con.prepareStatement(sql);
-            ps.setString(1, videojuego.getCodigo());
-            ps.setString(2, videojuego.getNombre());
-            ps.setString(3, videojuego.getPlataforma());
-            ps.setDouble(4, videojuego.getPrecio());
-            ps.setBoolean(5, videojuego.isDisponible());
-            ps.setString(6, videojuego.getGenero());
+	private static final String SQL_ACTUALIZAR = "UPDATE videojuegos "
+			+ "SET nombre = ?, plataforma = ?, precio = ?, disponible = ?, genero = ? " + "WHERE codigo = ?";
 
-            ps.executeUpdate();
+	private static final String SQL_ELIMINAR = "DELETE FROM videojuegos WHERE codigo = ?";
 
-            log.info("Videojuego insertado correctamente: " + videojuego.getCodigo());
+	public static boolean insertar(Videojuego v) {
+		Connection con = null;
+		PreparedStatement psBuscar = null;
+		PreparedStatement psInsertar = null;
+		ResultSet rs = null;
 
-        } catch (SQLException e) {
-            log.error("Error al insertar videojuego: " + e.getMessage(), e);
-            throw new RuntimeException("No se pudo insertar el videojuego");
-        } finally {
-            cerrarRecursos(null, ps, con);
-        }
-    }
+		try {
+			con = Conexion.obtenerConexion();
 
-    public ArrayList<Videojuego> listar() {
-        Connection con = null;
-        PreparedStatement ps = null;
-        ResultSet rs = null;
+			psBuscar = con.prepareStatement(SQL_BUSCAR_POR_CODIGO);
+			psBuscar.setString(1, v.getCodigo());
 
-        ArrayList<Videojuego> videojuegos = new ArrayList<>();
+			rs = psBuscar.executeQuery();
 
-        try {
-            con = Conexion.obtenerConexion();
+			if (!rs.next()) {
+				psInsertar = con.prepareStatement(SQL_INSERTAR);
 
-            String sql = "SELECT codigo, nombre, plataforma, precio, disponible, genero FROM videojuegos";
+				psInsertar.setString(1, v.getCodigo());
+				psInsertar.setString(2, v.getNombre());
+				psInsertar.setString(3, v.getPlataforma());
+				psInsertar.setDouble(4, v.getPrecio());
+				psInsertar.setBoolean(5, v.isDisponible());
+				psInsertar.setString(6, v.getGenero());
 
-            ps = con.prepareStatement(sql);
-            rs = ps.executeQuery();
+				int filas = psInsertar.executeUpdate();
 
-            while (rs.next()) {
-                Videojuego videojuego = new Videojuego();
-                videojuego.setCodigo(rs.getString("codigo"));
-                videojuego.setNombre(rs.getString("nombre"));
-                videojuego.setPlataforma(rs.getString("plataforma"));
-                videojuego.setPrecio(rs.getDouble("precio"));
-                videojuego.setDisponible(rs.getBoolean("disponible"));
-                videojuego.setGenero(rs.getString("genero"));
+				log.info("Videojuego insertado. Filas afectadas: " + filas);
 
-                videojuegos.add(videojuego);
-            }
+				return filas > 0 ? true : false;
 
-            log.info("Videojuegos listados correctamente");
+			} else {
+				throw new VideojuegoDuplicadoException("Está tratando de insertar un codigo que ya existe");
+			}
 
-            return videojuegos;
+		} catch (SQLException e) {
+			log.error("Error al insertar videojuego: " + e.getMessage(), e);
+			throw new RuntimeException("Error general al insertar el videojuego");
+		} finally {
+			cerrarRecursos(rs, psBuscar, null);
+			cerrarRecursos(null, psInsertar, con);
+		}
+	}
 
-        } catch (SQLException e) {
-            log.error("Error al listar videojuegos: " + e.getMessage(), e);
-            throw new RuntimeException("No se pudo listar los videojuegos");
-        } finally {
-            cerrarRecursos(rs, ps, con);
-        }
-    }
+	public static ArrayList<Videojuego> listar() {
+		Connection con = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
 
-    public Videojuego buscarPorCodigo(String codigo) {
-        Connection con = null;
-        PreparedStatement ps = null;
-        ResultSet rs = null;
+		ArrayList<Videojuego> videojuegos = new ArrayList<>();
 
-        try {
-            con = Conexion.obtenerConexion();
+		try {
+			con = Conexion.obtenerConexion();
 
-            String sql = "SELECT codigo, nombre, plataforma, precio, disponible, genero "
-                    + "FROM videojuegos WHERE codigo = ?";
+			ps = con.prepareStatement(SQL_LISTAR);
+			rs = ps.executeQuery();
 
-            ps = con.prepareStatement(sql);
-            ps.setString(1, codigo);
+			while (rs.next()) {
+				Videojuego videojuego = new Videojuego();
+				videojuego.setCodigo(rs.getString("codigo"));
+				videojuego.setNombre(rs.getString("nombre"));
+				videojuego.setPlataforma(rs.getString("plataforma"));
+				videojuego.setPrecio(rs.getDouble("precio"));
+				videojuego.setDisponible(rs.getBoolean("disponible"));
+				videojuego.setGenero(rs.getString("genero"));
 
-            rs = ps.executeQuery();
+				videojuegos.add(videojuego);
+			}
 
-            if (rs.next()) {
-                Videojuego videojuego = new Videojuego();
-                videojuego.setCodigo(rs.getString("codigo"));
-                videojuego.setNombre(rs.getString("nombre"));
-                videojuego.setPlataforma(rs.getString("plataforma"));
-                videojuego.setPrecio(rs.getDouble("precio"));
-                videojuego.setDisponible(rs.getBoolean("disponible"));
-                videojuego.setGenero(rs.getString("genero"));
+			if (videojuegos.isEmpty()) {
+				throw new VideojuegoNoEncontradoException("No existe ningun videojuego");
+			}
+			log.info("Videojuegos listados correctamente");
 
-                log.info("Videojuego encontrado: " + codigo);
+			return videojuegos;
 
-                return videojuego;
-            } else {
-                log.warn("No existe videojuego con codigo: " + codigo);
-                throw new RuntimeException("No existe videojuego con codigo: " + codigo);
-            }
+		} catch (SQLException e) {
+			log.error("Error al listar videojuegos: " + e.getMessage(), e);
+			throw new RuntimeException("Error general al listar los videojuegos");
+		} finally {
+			cerrarRecursos(rs, ps, con);
+		}
+	}
 
-        } catch (SQLException e) {
-            log.error("Error al buscar videojuego: " + e.getMessage(), e);
-            throw new RuntimeException("No se pudo buscar el videojuego");
-        } finally {
-            cerrarRecursos(rs, ps, con);
-        }
-    }
+	public static Videojuego buscarPorCodigo(String codigo) {
+		Connection con = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
 
-    public void actualizar(String codigo, Videojuego videojuego) {
-        Connection con = null;
-        PreparedStatement ps = null;
+		try {
 
-        try {
-            con = Conexion.obtenerConexion();
+			con = Conexion.obtenerConexion();
 
-            String sql = "UPDATE videojuegos "
-                    + "SET nombre = ?, plataforma = ?, precio = ?, disponible = ?, genero = ? "
-                    + "WHERE codigo = ?";
+			ps = con.prepareStatement(SQL_BUSCAR_POR_CODIGO);
+			ps.setString(1, codigo);
 
-            ps = con.prepareStatement(sql);
-            ps.setString(1, videojuego.getNombre());
-            ps.setString(2, videojuego.getPlataforma());
-            ps.setDouble(3, videojuego.getPrecio());
-            ps.setBoolean(4, videojuego.isDisponible());
-            ps.setString(5, videojuego.getGenero());
-            ps.setString(6, codigo);
+			rs = ps.executeQuery();
 
-            int filasActualizadas = ps.executeUpdate();
+			if (rs.next()) {
+				Videojuego videojuego = new Videojuego();
+				videojuego.setCodigo(rs.getString("codigo"));
+				videojuego.setNombre(rs.getString("nombre"));
+				videojuego.setPlataforma(rs.getString("plataforma"));
+				videojuego.setPrecio(rs.getDouble("precio"));
+				videojuego.setDisponible(rs.getBoolean("disponible"));
+				videojuego.setGenero(rs.getString("genero"));
 
-            if (filasActualizadas == 0) {
-                log.warn("No existe videojuego para actualizar con codigo: " + codigo);
-                throw new RuntimeException("No existe videojuego con codigo: " + codigo);
-            }
+				log.info("Videojuego encontrado: " + codigo);
 
-            log.info("Videojuego actualizado correctamente: " + codigo);
+				return videojuego;
+			} else {
+				log.warn("No existe videojuego con codigo: " + codigo);
+				throw new VideojuegoNoEncontradoException("No existe videojuego con codigo: " + codigo);
+			}
 
-        } catch (SQLException e) {
-            log.error("Error al actualizar videojuego: " + e.getMessage(), e);
-            throw new RuntimeException("No se pudo actualizar el videojuego");
-        } finally {
-            cerrarRecursos(null, ps, con);
-        }
-    }
+		} catch (SQLException e) {
+			log.error("Error al buscar videojuego: " + e.getMessage(), e);
+			throw new RuntimeException("Error general al buscar el videojuego");
+		} finally {
+			cerrarRecursos(rs, ps, con);
+		}
+	}
 
-    public void eliminar(String codigo) {
-        Connection con = null;
-        PreparedStatement ps = null;
+	public static void actualizar(String codigo, Videojuego videojuego) {
+		Connection con = null;
+		PreparedStatement ps = null;
 
-        try {
-            con = Conexion.obtenerConexion();
+		try {
+			con = Conexion.obtenerConexion();
 
-            String sql = "DELETE FROM videojuegos WHERE codigo = ?";
+			ps = con.prepareStatement(SQL_ACTUALIZAR);
+			ps.setString(1, videojuego.getNombre());
+			ps.setString(2, videojuego.getPlataforma());
+			ps.setDouble(3, videojuego.getPrecio());
+			ps.setBoolean(4, videojuego.isDisponible());
+			ps.setString(5, videojuego.getGenero());
+			ps.setString(6, codigo);
 
-            ps = con.prepareStatement(sql);
-            ps.setString(1, codigo);
+			int filasActualizadas = ps.executeUpdate();
 
-            int filasEliminadas = ps.executeUpdate();
+			if (filasActualizadas == 0) {
+				log.warn("No existe videojuego para actualizar con codigo: " + codigo);
+				throw new RuntimeException("No existe videojuego con codigo: " + codigo);
+			}
 
-            if (filasEliminadas == 0) {
-                log.warn("No existe videojuego para eliminar con codigo: " + codigo);
-                throw new RuntimeException("No existe videojuego con codigo: " + codigo);
-            }
+			log.info("Videojuego actualizado correctamente: " + codigo);
 
-            log.info("Videojuego eliminado correctamente: " + codigo);
+		} catch (SQLException e) {
+			log.error("Error al actualizar videojuego: " + e.getMessage(), e);
+			throw new RuntimeException("Error general al actualizar el videojuego");
+		} finally {
+			cerrarRecursos(null, ps, con);
+		}
+	}
 
-        } catch (SQLException e) {
-            log.error("Error al eliminar videojuego: " + e.getMessage(), e);
-            throw new RuntimeException("No se pudo eliminar el videojuego");
-        } finally {
-            cerrarRecursos(null, ps, con);
-        }
-    }
+	public static boolean eliminar(String codigo) {
+		Connection con = null;
+		PreparedStatement ps = null;
 
-    private void cerrarRecursos(ResultSet rs, PreparedStatement ps, Connection con) {
-        try {
-            if (rs != null) {
-                rs.close();
-            }
+		try {
+			con = Conexion.obtenerConexion();
 
-            if (ps != null) {
-                ps.close();
-            }
+			ps = con.prepareStatement(SQL_ELIMINAR);
+			ps.setString(1, codigo);
 
-            if (con != null) {
-                con.close();
-            }
+			int filasEliminadas = ps.executeUpdate();
 
-        } catch (SQLException e) {
-            log.error("Error cerrando recursos: " + e.getMessage(), e);
-        }
-    }
+			if (filasEliminadas == 0) {
+				log.warn("No existe videojuego para eliminar con codigo: " + codigo);
+				throw new RuntimeException("No existe videojuego con codigo: " + codigo);
+			}
+
+			log.info("Videojuego eliminado correctamente: " + codigo);
+			return filasEliminadas > 0 ? true : false;
+		} catch (SQLException e) {
+			log.error("Error al eliminar videojuego: " + e.getMessage(), e);
+			throw new RuntimeException("Error general al eliminar el videojuego");
+		} finally {
+			cerrarRecursos(null, ps, con);
+		}
+	}
+
+	private static void cerrarRecursos(ResultSet rs, PreparedStatement ps, Connection con) {
+		try {
+			if (rs != null) {
+				rs.close();
+			}
+
+			if (ps != null) {
+				ps.close();
+			}
+
+			if (con != null) {
+				con.close();
+			}
+
+		} catch (SQLException e) {
+			log.error("Error cerrando recursos: " + e.getMessage(), e);
+		}
+	}
 }
